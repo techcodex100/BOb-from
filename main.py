@@ -113,3 +113,6 @@ def generate_pdf(data: Form144Data):
     final_pdf.save(pdf_path)
 
     return FileResponse(pdf_path, media_type="application/pdf", filename=pdf_path)
+@app.get("/")
+def root():
+    return RedirectResponse(url="/docs")

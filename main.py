@@ -2,6 +2,7 @@ from fastapi import FastAPI
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 from PIL import Image, ImageDraw, ImageFont
+from fastapi.responses import RedirectResponse
 
 app = FastAPI()
 

@@ -1,12 +1,11 @@
 from fastapi import FastAPI
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, RedirectResponse
 from pydantic import BaseModel
 from PIL import Image, ImageDraw, ImageFont
-from fastapi.responses import RedirectResponse
 
 app = FastAPI()
 
-# 🔹 Input data structure
+# 🔹 Input model
 class Form144Data(BaseModel):
     branch_name: str
     beneficiary_name: str
@@ -39,22 +38,20 @@ class Form144Data(BaseModel):
     page2_date: str
     page2_signature: str
 
-# 🔹 Draw digits in boxes
+# 🔹 Digits in boxes
 def draw_digits_in_boxes(draw, value, start_x, y, spacing=22, font=None):
     for i, digit in enumerate(value):
         draw.text((start_x + i * spacing, y), digit, font=font, fill="black")
 
-# 🔹 Generate PDF
+# 🔹 PDF generator endpoint
 @app.post("/generate", response_class=FileResponse)
 def generate_pdf(data: Form144Data):
-    # Load page images
     page1 = Image.open("bankof baroda 1.jpg").convert("RGB")
     page2 = Image.open("bank of baroda 2.jpg").convert("RGB")
     draw1 = ImageDraw.Draw(page1)
     draw2 = ImageDraw.Draw(page2)
-    font = ImageFont.truetype("arial.ttf", 18)
+    font = ImageFont.load_default()  # ✅ using default font (no .ttf needed)
 
-    # Field coordinates
     positions = {
         "branch_name": (1000, 100),
         "beneficiary_name": (280, 175),
@@ -88,14 +85,12 @@ def generate_pdf(data: Form144Data):
         "page2_signature": (700, 1400)
     }
 
-    # Fields that need box-wise writing
     box_fields = [
         "shipment_date", "convert_100_percent_inr", "convert_partial_and_hold",
         "hold_in_nostro", "credit_as_per_a2", "credit_my_PCFC_acc",
         "debit_charges_account", "booking_date", "due_date", "page2_date"
     ]
 
-    # Draw on both pages
     for key, value in data.dict().items():
         if key in positions:
             x, y = positions[key]
@@ -106,7 +101,6 @@ def generate_pdf(data: Form144Data):
                 for i, line in enumerate(value.split("\n")):
                     draw.text((x, y + i * 20), line, font=font, fill="black")
 
-    # Merge both pages into one PDF
     pdf_path = "generated_remittance_form.pdf"
     final_pdf = Image.new("RGB", (page1.width, page1.height * 2), "white")
     final_pdf.paste(page1, (0, 0))
@@ -114,6 +108,8 @@ def generate_pdf(data: Form144Data):
     final_pdf.save(pdf_path)
 
     return FileResponse(pdf_path, media_type="application/pdf", filename=pdf_path)
+
+# 🔹 Redirect root to Swagger docs
 @app.get("/")
 def root():
     return RedirectResponse(url="/docs")

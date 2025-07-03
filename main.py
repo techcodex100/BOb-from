@@ -1,132 +1,218 @@
-from fastapi import FastAPI
-from fastapi.responses import FileResponse, RedirectResponse
+import os
+from io import BytesIO
+from fastapi import FastAPI, Response
 from pydantic import BaseModel
-from PIL import Image, ImageDraw, ImageFont
+from reportlab.lib.pagesizes import A4
+from reportlab.pdfgen import canvas
+from reportlab.platypus import Table, TableStyle, Paragraph
+from reportlab.lib.styles import getSampleStyleSheet
+from reportlab.lib import colors
+import threading
 
 app = FastAPI()
+lock = threading.Lock()
+COUNTER_FILE = "counter.txt"
 
-# 📝 Input model
-class Form144Data(BaseModel):
-    branch_name: str
-    beneficiary_name: str
-    account_number: str
-    line_of_business: str
-    commodity_service: str
-    bill_currency: str
-    amount_figures: str
-    amount_words: str
-    remitter_name: str
-    remitter_address: str
-    purpose_code: str
-    purpose_description: str
-    shipment_date: str
-    credit_currency: str
-    max_amount: str
-    convert_100_percent_inr: str
-    convert_partial_and_hold: str
-    hold_in_nostro: str
-    credit_as_per_a2: str
-    credit_my_PCFC_acc: str
-    debit_charges_account: str
-    fc_number: str
-    booking_date: str
-    fc_amount: str
-    due_date: str
-    amount_utilized: str
-    exchange_rate: str
-    date:str
-    signature: str
-    page2_date: str
-    page2_signature: str
+# ✅ Input Model
+class SalesContractData(BaseModel):
+    contract_no: str
+    date: str
+    company_name: str
+    tagline: str
+    website: str
+    email: str
+    address: str
+    gst_number: str
+    seller: list[str]
+    consignee: list[str]
+    notify_party: list[str] = []
+    product_name: str
+    quantity: str
+    price: str
+    amount: str
+    packing: str
+    loading_port: str
+    destination_port: str
+    shipment: str
+    sellers_bank: str
+    account_no: str
+    documents: str
+    payment_terms: str
 
-# ✏️ Function to draw digit boxes
-def draw_digits_in_boxes(draw, value, start_x, y, spacing=34, font=None):
-    for i, digit in enumerate(value):
-        draw.text((start_x + i * spacing, y), digit, font=font, fill="black")
+# ✅ Counter Logic
+def get_next_counter():
+    with lock:
+        if not os.path.exists(COUNTER_FILE):
+            with open(COUNTER_FILE, "w") as f:
+                f.write("1")
+            return 1
+        with open(COUNTER_FILE, "r+") as f:
+            count = int(f.read())
+            f.seek(0)
+            f.write(str(count + 1))
+            f.truncate()
+            return count
 
-# 🧾 Generate PDF
-@app.post("/generate", response_class=FileResponse)
-def generate_pdf(data: Form144Data):
-    # Load 5 scanned images
-    pages = [Image.open(f"bank of baroda {i}.jpg").convert("RGB") for i in range(1, 7)]
-    draws = [ImageDraw.Draw(page) for page in pages]
+# ✅ PDF Generation
+@app.post("/generate-pdf/")
+async def generate_pdf(data: SalesContractData):
+    pdf_number = get_next_counter()
+    filename = f"Sales_Contract_{pdf_number}.pdf"
+    buffer = BytesIO()
+    c = canvas.Canvas(buffer, pagesize=A4)
+    width, height = A4
+    styles = getSampleStyleSheet()
+    normal_style = styles["Normal"]
 
-    # Use larger font
-    try:
-        font = ImageFont.truetype("arial.ttf", size=30)  # if Arial is available
-    except:
-        font = ImageFont.load_default()
+    # Margins
+    left_margin = 50
+    right_margin = width - 50
+    top_margin = height - 40
 
-    # Position mapping (x, y, page_index)
-    positions = {
-        "branch_name": (1000, 100, 0),
-        "beneficiary_name": (280, 175, 0),
-        "account_number": (295, 210, 0),
-        "line_of_business": (400, 265, 0),
-        "commodity_service": (975, 265, 0),
-        "bill_currency": (310, 325, 0),
-        "amount_figures": (300, 375, 0),
-        "amount_words": (700, 360, 0),
-        "remitter_name": (300, 410, 0),
-        "remitter_address": (300, 475, 0),
-        "purpose_code": (200, 550, 0),
-        "purpose_description": (540, 550, 0),
-        "shipment_date": (930, 590, 0),
-        "credit_currency": (800, 682, 0),
-        "max_amount": (950, 682, 0),
-        "convert_100_percent_inr": (740, 790, 0),
-        "convert_partial_and_hold": (740, 830, 0),
-        "hold_in_nostro": (740, 865, 0),
-        "credit_as_per_a2": (740, 910, 0),
-        "credit_my_PCFC_acc": (742, 975, 0),
-        "debit_charges_account": (270, 1040, 0),
-        "fc_number": (400, 1175, 0),
-        "booking_date": (950, 1175, 0),
-        "fc_amount": (400, 1225, 0),
-        "due_date": (950, 1225, 0),
-        "amount_utilized": (400, 1275, 0),
-        "exchange_rate": (1050, 1265, 0),
-        "date":(160,1370,0),
-        "signature": (700, 1375, 0),
-        "page2_date": (120, 1400, 1),
-        "page2_signature": (700, 1400, 1)
-        # 🔔 You can add more fields for page3, page4, page5 as needed
-    }
+    # 🔷 Header
+    c.setFont("Helvetica-Bold", 10)
+    c.setFillColor(colors.grey)
+    c.drawString(left_margin, top_margin, f"Website: {data.website}")
+    c.setFont("Helvetica-Bold", 16)
+    c.setFillColor(colors.black)
+    c.drawCentredString(width / 2, top_margin, data.company_name.upper())
+    c.setFont("Helvetica-Bold", 10)
+    c.setFillColor(colors.grey)
+    c.drawRightString(right_margin, top_margin, f"Email: {data.email}")
 
-    # Fields with boxes (draw digits with spacing)
-    box_fields = [
-        "shipment_date", "convert_100_percent_inr", "convert_partial_and_hold",
-        "hold_in_nostro", "credit_as_per_a2", "credit_my_PCFC_acc",
-        "debit_charges_account", "booking_date","date", "due_date", "page2_date"
+    c.setFont("Helvetica", 11)
+    c.setFillColor(colors.black)
+    c.drawCentredString(width / 2, top_margin - 20, data.tagline)
+
+    c.setFont("Helvetica", 10)
+    c.drawString(left_margin, top_margin - 40, f"Address: {data.address}")
+    c.drawRightString(right_margin, top_margin - 40, f"GST: {data.gst_number}")
+
+    # 🔷 Title & Contract Info
+    start_y = top_margin - 80
+    c.setFont("Helvetica-Bold", 14)
+    c.drawCentredString(width / 2, start_y, "SALES CONTRACT")
+    c.setFont("Helvetica", 11)
+    c.drawString(left_margin, start_y - 20, f"Contract No: {data.contract_no}")
+    c.drawRightString(right_margin, start_y - 20, f"Date: {data.date}")
+
+    # 🔷 Seller / Consignee / Notify Party (Columns)
+    y = start_y - 60
+    block_width = (width - 100) / 3
+    x_positions = [50, 50 + block_width + 10, 50 + 2 * (block_width + 10)]
+
+    titles = ["SELLER",  "CONSIGNEE | NOTIFY PARTY 1",   "NOTIFY PARTY 2"]
+    blocks = [
+        "\n".join(data.seller),
+        "\n".join(data.consignee),
+        "\n".join(data.notify_party) if data.notify_party else "TO ORDER"
     ]
 
-    # Draw fields on images
-    for key, value in data.dict().items():
-        if key in positions:
-            x, y, page_idx = positions[key]
-            draw = draws[page_idx]
-            if key in box_fields:
-                draw_digits_in_boxes(draw, value, x, y, spacing=34, font=font)
-            else:
-                for i, line in enumerate(value.split("\n")):
-                    draw.text((x, y + i * 40), line, font=font, fill="black")
+    c.setFont("Helvetica-Bold", 10)
+    for i in range(3):
+        c.drawString(x_positions[i], y, titles[i])
+        c.setFont("Helvetica-Bold", 10)
+        text_obj = c.beginText(x_positions[i], y - 14)
+        for line in blocks[i].split("\n"):
+            text_obj.textLine(line.strip())
+        c.drawText(text_obj)
 
-    # Combine all 5 pages into single vertical PDF
-    width = pages[0].width
-    total_height = sum(page.height for page in pages)
-    final_pdf = Image.new("RGB", (width, total_height), "white")
+    y = y - 100  # Space below notify party
 
-    current_y = 0
-    for page in pages:
-        final_pdf.paste(page, (0, current_y))
-        current_y += page.height
+    # 🔷 Product Table with wrapped text
+    from reportlab.platypus import SimpleDocTemplate, Table
+    from reportlab.platypus import Frame
 
-    output_path = "generated_remittance_form.pdf"
-    final_pdf.save(output_path)
+    # Prepare wrapped cells using Paragraph
+    table_data = [
+        ["Product", "Quantity", "Price (CIF), Colombo", "Amount(CIF)"],
+        [
+            Paragraph(data.product_name, normal_style),
+            Paragraph(data.quantity, normal_style),
+            Paragraph(data.price, normal_style),
+            Paragraph(data.amount, normal_style)
+        ]
+    ]
 
-    return FileResponse(output_path, media_type="application/pdf", filename=output_path)
+    table = Table(table_data, colWidths=[130, 130, 130, 100])
+    table.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (-1, 0), colors.lightblue),
+        ('TEXTCOLOR', (0, 0), (-1, 0), colors.black),
+        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+        ('FONTSIZE', (0, 0), (-1, -1), 9),
+        ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+        ('GRID', (0, 0), (-1, -1), 0.5, colors.black),
+    ]))
 
-# Swagger redirect
+    frame = Frame(left_margin, y - 100, width - 2 * left_margin, 100, showBoundary=0)
+    frame.addFromList([table], c)
+    y = y - 90
+
+    # 🔷 Dynamic Fields
+    dynamic_details = [
+        ("Packing", data.packing),
+        ("Loading Port", data.loading_port),
+        ("Destination Port", data.destination_port),
+        ("Shipment", data.shipment),
+        ("Seller’s Bank", data.sellers_bank),
+        ("Account No.", data.account_no),
+        ("Documents", data.documents),
+        ("Payment Terms", data.payment_terms)
+    ]
+    for label, value in dynamic_details:
+        c.setFont("Helvetica-Bold", 10)
+        c.drawString(left_margin, y, f"{label}:")
+        c.setFont("Helvetica", 10)
+        for line in str(value).split("\n"):
+            c.drawString(left_margin + 120, y, line.strip())
+            y -= 18
+        y -= 8
+
+    # 🔷 Static Details
+    static_details = [
+        ("Arbitration", [
+            "In the event of any dispute between the parties arising out of this contract,",
+            "all disputes shall be settled by the way of arbitration through a sole arbitration",
+            "to be appointed by M/S Shraddha Impex. The place of arbitration shall be in Indore, M.P.",
+            "and the laws of India with regards to arbitration shall be applicable to this Arbitration Clause."
+        ]),
+        ("Terms & Conditions", [
+            "1) In case of port congestion/skippance of vessel or any other port related disturbances,",
+            "supplier or exporter will not be liable for any claim.",
+            "2) Quality approved at load port by independent surveyors is finaland to be acceptable by both,",
+            " the parties and the seller will not be liable for any claim at destination port."
+        ])
+    ]
+    for label, lines in static_details:
+        c.setFont("Helvetica-Bold", 10)
+        c.drawString(left_margin, y, f"{label}:")
+        c.setFont("Helvetica", 10)
+        for line in lines:
+            c.drawString(left_margin + 120, y, line.strip())
+            y -= 14
+        y -= 8
+
+    # 🔷 Acceptance Block
+    c.setFont("Helvetica-Bold", 11)
+    c.drawCentredString(width / 2, y, "Accepted")
+    y -= 20
+    c.setFont("Helvetica", 10)
+    c.drawString(50, y, "For, Seller")
+    c.drawString(230, y, "For, Consignee")
+    c.drawString(400, y, "For, Notify Party")
+    y -= 50
+    c.drawString(50, y, data.seller[0] if data.seller else "")
+    c.drawString(230, y, data.consignee[0] if data.consignee else "")
+    c.drawString(400, y, (data.notify_party[0] if data.notify_party else "TO ORDER"))
+
+    # ✅ Save
+    c.save()
+    buffer.seek(0)
+    return Response(content=buffer.read(), media_type="application/pdf", headers={
+        "Content-Disposition": f"attachment; filename={filename}"
+    })
+
 @app.get("/")
-def root():
-    return RedirectResponse(url="/docs")
+def home():
+    return {"message": "Your Render App is Working!"}

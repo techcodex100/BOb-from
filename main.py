@@ -64,7 +64,7 @@ def generate_pdf(data: Form144Data):
 
     # Load font
     try:
-        font = ImageFont.truetype("arial.ttf", size=28)
+        font = ImageFont.truetype("arial.ttf", size=30)
     except:
         font = ImageFont.load_default()
 
@@ -110,14 +110,15 @@ def generate_pdf(data: Form144Data):
 
     # Draw values on pages
     for key, value in data.dict().items():
-        if key in positions:
-            x, y, page_idx = positions[key]
-            draw = draws[page_idx]
-            if key in box_fields:
-                draw_digits_in_boxes(draw, value, x, y, spacing=34, font=font)
-            else:
-                for i, line in enumerate(value.split("\n")):
-                    draw.text((x, y + i * 40), line, font=font, fill="black")
+     if key in positions:
+        x, y, page_idx = positions[key]
+        draw = draws[page_idx]
+        if key in box_fields:
+            draw_digits_in_boxes(draw, value, x, y, spacing=34, font=font, max_digits=14)
+        else:
+            for i, line in enumerate(value.split("\n")):
+                draw.text((x, y + i * 40), line, font=font, fill="black")
+
 
     # Combine all pages into single vertical image
     width = pages[0].width
